@@ -657,7 +657,7 @@ def analizar_todos() -> None:
                     print(f"  → Error enviando señal ❌")
 
             # SETUP EN FORMACIÓN — alerta temprana
-            elif 4.5 <= score < 6.0 and puede_enviar_alerta(activo, score):
+            elif 5.5 <= score < 6.0 and puede_enviar_alerta(activo, score):
                 ok = send_telegram(generar_alerta_trade(r, "FORMACION"))
                 if ok:
                     estado["alertas_enviadas"][activo]  = time.time()
