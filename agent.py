@@ -24,7 +24,6 @@ ACTIVOS = {
     "DXY":      {"ticker": "DX-Y.NYB","emoji": "💵", "nombre": "DXY Index",      "pip_val": 0.001,  "spread": 0.01},
 }
 
-# Keywords noticias por activo y dirección
 KEYWORDS = {
     "GOLD": {
         "bull": ["war","attack","sanctions","inflation","rate cut","geopolit","iran","hormuz","conflict","crisis","fed cut","recession","safe haven","gold rally","uncertainty"],
@@ -52,24 +51,21 @@ KEYWORDS = {
     }
 }
 
-# Sesiones de mercado en UTC
 SESIONES = {
     "ASIA":     {"open_utc": 0,  "close_utc": 8,  "emoji": "🌏"},
     "EUROPA":   {"open_utc": 7,  "close_utc": 16, "emoji": "🌍"},
     "NEW_YORK": {"open_utc": 13, "close_utc": 21, "emoji": "🌎"},
 }
 
-# Eventos macro críticos (hora UTC)
 EVENTOS_MACRO = {
     "EIA_INVENTORY": {"weekday": 2, "hour_utc": 14, "min_utc": 30, "nombre": "EIA Inventory Report", "emoji": "🛢️", "activos": ["OIL"]},
     "NFP":           {"weekday": 4, "hour_utc": 13, "min_utc": 30, "nombre": "NFP Employment",        "emoji": "💼", "activos": ["GOLD","SILVER","DXY"]},
 }
 
-# Estado interno del agente
 estado = {
-    "alertas_enviadas": {},     # activo -> timestamp última alerta
-    "scores_anteriores": {},    # activo -> score anterior
-    "pre_evento_enviado": {},   # evento -> bool
+    "alertas_enviadas": {},
+    "scores_anteriores": {},
+    "pre_evento_enviado": {},
     "ultimo_ciclo": None,
 }
 
@@ -129,7 +125,6 @@ def calc_stochastic(df, k: int = 14) -> float:
     return float(stoch.iloc[-1]) if not stoch.empty else 50.0
 
 def detectar_divergencia_rsi(df_h1) -> dict:
-    """Detecta divergencias alcistas y bajistas entre precio y RSI"""
     if df_h1 is None or len(df_h1) < 30:
         return {"tipo": "none", "score": 0}
     close = df_h1["Close"]
@@ -140,10 +135,8 @@ def detectar_divergencia_rsi(df_h1) -> dict:
     precio_anterior  = float(close.iloc[-10])
     rsi_reciente     = float(rsi_series.iloc[-1])
     rsi_anterior     = float(rsi_series.iloc[-10])
-    # Divergencia alcista: precio baja pero RSI sube
     if precio_reciente < precio_anterior and rsi_reciente > rsi_anterior and rsi_reciente < 45:
         return {"tipo": "alcista", "score": 3}
-    # Divergencia bajista: precio sube pero RSI baja
     if precio_reciente > precio_anterior and rsi_reciente < rsi_anterior and rsi_reciente > 55:
         return {"tipo": "bajista", "score": 3}
     return {"tipo": "none", "score": 0}
@@ -164,7 +157,6 @@ def calc_fibonacci_signal(df_daily) -> dict:
     return {"signal": signal, "pullback_pct": round(pullback_pct, 2)}
 
 def detectar_order_block(df_daily) -> dict:
-    """Detecta order blocks institucionales (zonas de acumulación)"""
     if df_daily is None or len(df_daily) < 10:
         return {"zona": "none", "score": 0, "nivel": 0}
     close  = float(df_daily["Close"].iloc[-1])
@@ -172,12 +164,10 @@ def detectar_order_block(df_daily) -> dict:
     lows   = df_daily["Low"].tail(10).values
     closes = df_daily["Close"].tail(10).values
     for i in range(len(closes) - 2):
-        # Bullish order block: vela bajista seguida de impulso alcista fuerte
         if closes[i] < closes[i-1] and closes[i+1] > closes[i] * 1.003:
             nivel = lows[i]
             if abs(close - nivel) / nivel < 0.005:
                 return {"zona": "bullish_ob", "score": 2, "nivel": round(nivel, 4)}
-        # Bearish order block: vela alcista seguida de impulso bajista fuerte
         if closes[i] > closes[i-1] and closes[i+1] < closes[i] * 0.997:
             nivel = highs[i]
             if abs(close - nivel) / nivel < 0.005:
@@ -185,20 +175,15 @@ def detectar_order_block(df_daily) -> dict:
     return {"zona": "none", "score": 0, "nivel": 0}
 
 def detectar_fair_value_gap(df_h1) -> dict:
-    """Detecta Fair Value Gaps (imbalances) en H1"""
     if df_h1 is None or len(df_h1) < 5:
         return {"tipo": "none", "score": 0}
     for i in range(len(df_h1) - 3, max(len(df_h1) - 15, 0), -1):
         high_1 = float(df_h1["High"].iloc[i-1])
         low_1  = float(df_h1["Low"].iloc[i-1])
-        high_2 = float(df_h1["High"].iloc[i])
-        low_2  = float(df_h1["Low"].iloc[i])
         high_3 = float(df_h1["High"].iloc[i+1])
         low_3  = float(df_h1["Low"].iloc[i+1])
-        # FVG alcista: gap entre high[i-1] y low[i+1]
         if low_3 > high_1:
             return {"tipo": "alcista", "score": 2, "zona_alta": low_3, "zona_baja": high_1}
-        # FVG bajista: gap entre low[i-1] y high[i+1]
         if high_3 < low_1:
             return {"tipo": "bajista", "score": 2, "zona_alta": low_1, "zona_baja": high_3}
     return {"tipo": "none", "score": 0}
@@ -275,13 +260,11 @@ def macd_bb_score(df_h1) -> dict:
     score = 0
     direction = "neutral"
 
-    # Cruce MACD (señal más fuerte)
     if macd_val > 0 and macd_prev <= 0:    score += 3; direction = "long"
     elif macd_val < 0 and macd_prev >= 0:  score += 3; direction = "short"
     elif macd_val > 0:                     score += 1; direction = "long"
     elif macd_val < 0:                     score += 1; direction = "short"
 
-    # Bollinger bands
     if price <= float(lower.iloc[-1]) * 1.002:
         score += 3
         if direction == "neutral": direction = "long"
@@ -290,7 +273,7 @@ def macd_bb_score(df_h1) -> dict:
         if direction == "neutral": direction = "short"
 
     bb_squeeze = float((upper - lower).iloc[-1]) / float(sma20.iloc[-1]) * 100
-    if bb_squeeze < 1.5: score += 2  # squeeze = explosión inminente
+    if bb_squeeze < 1.5: score += 2
     elif bb_squeeze < 2.0: score += 1
 
     return {"score": min(score, 8), "direction": direction,
@@ -327,7 +310,6 @@ def get_news_sentiment(activo: str) -> dict:
         for a in articles:
             text = (a.get("title", "") + " " + a.get("description", "")).lower()
             pub_at = a.get("publishedAt", "")
-            # Calcular urgencia: noticias más recientes valen más
             try:
                 pub_dt = datetime.strptime(pub_at[:19], "%Y-%m-%dT%H:%M:%S")
                 horas_atras = (now - pub_dt).total_seconds() / 3600
@@ -376,13 +358,11 @@ def sr_smc_score(df_daily) -> dict:
     elif pos > 0.85:  score += 4; direction = "short"
     elif pos > 0.70:  score += 2; direction = "short"
 
-    # Ruptura de estructura
     prev_high = float(df_daily["High"].iloc[-6:-1].max())
     prev_low  = float(df_daily["Low"].iloc[-6:-1].min())
     if close > prev_high * 1.003:    score += 2; direction = "long"
     elif close < prev_low * 0.997:   score += 2; direction = "short"
 
-    # Order blocks
     ob = detectar_order_block(df_daily)
     if ob["zona"] == "bullish_ob":   score += ob["score"]; direction = "long"
     elif ob["zona"] == "bearish_ob": score += ob["score"]; direction = "short"
@@ -423,7 +403,7 @@ def macro_correlation_score(activo: str) -> dict:
             elif dxy_trend > 0.3:  score += 2; direction = "short"
 
         elif activo == "DXY":
-            if vix_level > 25:     score += 2; direction = "long"  # risk off = dólar sube
+            if vix_level > 25:     score += 2; direction = "long"
             elif vix_level < 15:   score += 2; direction = "short"
 
         return {"score": min(score, 5), "direction": direction,
@@ -432,7 +412,50 @@ def macro_correlation_score(activo: str) -> dict:
         return {"score": 0, "direction": "neutral", "dxy_trend": 0, "vix": 0}
 
 # ─────────────────────────────────────────
-# SCORE TOTAL
+# ✅ FIX 1: VALIDACIÓN DIRECCIÓN COHERENTE
+# RSI/Stoch oversold = NUNCA recomendar SHORT
+# RSI/Stoch overbought = NUNCA recomendar LONG
+# ─────────────────────────────────────────
+def validar_coherencia_direccion(direction: str, s1: dict) -> tuple[bool, str]:
+    """
+    Retorna (es_valido, motivo_rechazo)
+    Bloquea señales donde técnica y dirección son contradictorias.
+    """
+    rsi   = s1.get("rsi", 50)
+    stoch = s1.get("stoch", 50)
+
+    # Bug original: recomendar SHORT cuando RSI/Stoch oversold
+    if direction == "short" and rsi < 35:
+        return False, f"BLOQUEADO: SHORT inválido con RSI={rsi} (oversold). Señal contradictoria."
+
+    if direction == "short" and stoch < 25:
+        return False, f"BLOQUEADO: SHORT inválido con Stoch={stoch} (oversold). Señal contradictoria."
+
+    # También bloquear LONG cuando RSI/Stoch overbought extremo
+    if direction == "long" and rsi > 75:
+        return False, f"BLOQUEADO: LONG inválido con RSI={rsi} (overbought). Señal contradictoria."
+
+    if direction == "long" and stoch > 85:
+        return False, f"BLOQUEADO: LONG inválido con Stoch={stoch} (overbought). Señal contradictoria."
+
+    return True, ""
+
+# ─────────────────────────────────────────
+# ✅ FIX 2: HARD BLOCK SI NOTICIAS = 0
+# Sin catalizador macro = sin alerta
+# ─────────────────────────────────────────
+def validar_noticias(s3: dict) -> tuple[bool, str]:
+    """
+    Retorna (es_valido, motivo_rechazo)
+    Bloquea cualquier señal sin catalizador de noticias confirmado.
+    """
+    news_score = s3.get("score", 0)
+    if news_score == 0:
+        return False, "BLOQUEADO: Noticias 0/5. Sin catalizador macro confirmado. Regla Soros: sin noticia = sin trade."
+    return True, ""
+
+# ─────────────────────────────────────────
+# SCORE TOTAL — con validaciones integradas
 # ─────────────────────────────────────────
 def calcular_score_total(activo: str) -> dict:
     cfg    = ACTIVOS[activo]
@@ -445,37 +468,56 @@ def calcular_score_total(activo: str) -> dict:
     s4 = sr_smc_score(df_day)
     s5 = macro_correlation_score(activo)
 
-    # FVG como bonus
     fvg = detectar_fair_value_gap(df_h1)
 
-    # Pesos por sistema
     pesos = [0.28, 0.22, 0.25, 0.15, 0.10]
     maxs  = [10,   8,    5,    8,    5]
     scores = [s1["score"], s2["score"], s3["score"], s4["score"], s5["score"]]
     score_norm = sum(scores[i] / maxs[i] * pesos[i] * 10 for i in range(5))
 
-    # Bonus FVG
     if fvg["tipo"] != "none":
         score_norm = min(score_norm + 0.5, 10.0)
 
-    # Dirección por consenso ponderado
     dirs    = [s1["direction"], s2["direction"], s3["direction"], s4["direction"], s5["direction"]]
     long_w  = sum(pesos[i] for i, d in enumerate(dirs) if d == "long")
     short_w = sum(pesos[i] for i, d in enumerate(dirs) if d == "short")
     direction = "long" if long_w > short_w else ("short" if short_w > long_w else "neutral")
 
-    # Precios y niveles
+    # ─────────────────────────────────────────
+    # ✅ APLICAR VALIDACIONES ANTES DE ALERTAR
+    # ─────────────────────────────────────────
+    bloqueo_activo = False
+    motivo_bloqueo = ""
+
+    # Fix 2: Bloqueo por noticias = 0
+    noticias_ok, motivo_noticias = validar_noticias(s3)
+    if not noticias_ok:
+        bloqueo_activo = True
+        motivo_bloqueo = motivo_noticias
+        print(f"  [{activo}] {motivo_noticias}")
+
+    # Fix 1: Bloqueo por incoherencia técnica
+    if not bloqueo_activo and direction != "neutral":
+        coherencia_ok, motivo_coherencia = validar_coherencia_direccion(direction, s1)
+        if not coherencia_ok:
+            bloqueo_activo = True
+            motivo_bloqueo = motivo_coherencia
+            print(f"  [{activo}] {motivo_coherencia}")
+
+    # Si hay bloqueo, forzar score a 0 para que no genere alerta
+    if bloqueo_activo:
+        score_norm = 0.0
+        direction = "neutral"
+
     price = float(df_day["Close"].iloc[-1]) if df_day is not None else 0.0
     atr   = float((df_day["High"].tail(14) - df_day["Low"].tail(14)).mean()) if df_day is not None and len(df_day) >= 14 else price * 0.008
 
-    # SL más ajustado para entradas tempranas (1.2x ATR)
     sl_dist = atr * 1.2
     tp_dist = sl_dist * 3.5
     sl = round((price - sl_dist) if direction == "long" else (price + sl_dist), 4)
     tp = round((price + tp_dist) if direction == "long" else (price - tp_dist), 4)
 
-    # Calcular lotes recomendados (base 1% de capital estimado en CLP)
-    capital_usd = 1500  # aprox fase actual
+    capital_usd = 1500
     riesgo_usd  = capital_usd * 0.01
     pip_val     = cfg["pip_val"]
     sl_pips     = sl_dist / pip_val if pip_val > 0 else 100
@@ -489,13 +531,13 @@ def calcular_score_total(activo: str) -> dict:
         "s1": s1, "s2": s2, "s3": s3, "s4": s4, "s5": s5, "fvg": fvg,
         "headline": s3.get("headline", ""), "urgencia_noticias": s3.get("urgencia", 0),
         "vix": s5.get("vix", 0), "dxy_trend": s5.get("dxy_trend", 0),
+        "bloqueado": bloqueo_activo, "motivo_bloqueo": motivo_bloqueo,
     }
 
 # ─────────────────────────────────────────
 # MENSAJES
 # ─────────────────────────────────────────
 def generar_alerta_trade(r: dict, tipo: str = "SEÑAL") -> str:
-    """Mensaje de acción inmediata — directo al grano"""
     dir_txt = "LONG 🟢 COMPRA" if r["direction"] == "long" else "SHORT 🔴 VENDE"
     hora    = datetime.now(CLT).strftime("%H:%M CLT")
 
@@ -549,7 +591,6 @@ def generar_alerta_macro(evento: str, minutos_restantes: int) -> str:
 ━━━━━━━━━━━━━━━━━━━━━━""".strip()
 
 def generar_alerta_sesion(sesion: str) -> str:
-    s   = SESIONES[sesion]
     hora = datetime.now(CLT).strftime("%H:%M CLT")
     msgs = {
         "ASIA":     "🌏 <b>APERTURA ASIA</b> — Mercados japoneses y australianos abren.\nMonitoreando Gold y Platinum por demanda oriental.",
@@ -571,23 +612,15 @@ def get_sesion_actual() -> str | None:
     return None
 
 def es_apertura_sesion(sesion: str) -> bool:
-    """True si estamos en los primeros 15 minutos de una sesión"""
     now_utc = datetime.utcnow()
     hora    = SESIONES[sesion]["open_utc"]
     return now_utc.hour == hora and now_utc.minute < 15
 
-def es_cierre_sesion(sesion: str) -> bool:
-    """True si estamos en los últimos 15 minutos de una sesión"""
-    now_utc = datetime.utcnow()
-    hora    = SESIONES[sesion]["close_utc"]
-    return now_utc.hour == hora and now_utc.minute >= 45
-
 def get_intervalo_ciclo() -> int:
-    """Ciclo más corto en horario peak NYC/London overlap"""
     now_utc = datetime.utcnow().hour
-    if 13 <= now_utc <= 16:  return 900   # 15 min — overlap London/NY
-    if 7  <= now_utc <= 21:  return 1800  # 30 min — horario normal
-    return 3600                            # 60 min — fuera de horario
+    if 13 <= now_utc <= 16:  return 900
+    if 7  <= now_utc <= 21:  return 1800
+    return 3600
 
 def check_eventos_macro() -> None:
     now = datetime.utcnow()
@@ -603,12 +636,10 @@ def check_eventos_macro() -> None:
                 print(f"  → ALERTA MACRO: {ev['nombre']}")
 
 def puede_enviar_alerta(activo: str, score: float) -> bool:
-    """Anti-spam: mínimo 45 min entre alertas del mismo activo"""
     ultima = estado["alertas_enviadas"].get(activo)
     if ultima is None:
         return True
     minutos = (time.time() - ultima) / 60
-    # Si score subió mucho desde última alerta, permite re-alertar antes
     score_anterior = estado["scores_anteriores"].get(activo, 0)
     if score >= 8.0 and score - score_anterior >= 1.5:
         return minutos >= 20
@@ -621,7 +652,6 @@ def analizar_todos() -> None:
     now_clt = datetime.now(CLT)
     print(f"\n[{now_clt.strftime('%H:%M')}] Analizando mercados...")
 
-    # Detectar aperturas y cierres de sesión
     for sesion in SESIONES:
         if es_apertura_sesion(sesion):
             key = f"apertura_{sesion}_{now_clt.date()}"
@@ -630,15 +660,20 @@ def analizar_todos() -> None:
                 estado["pre_evento_enviado"][key] = True
                 print(f"  → ALERTA SESIÓN: {sesion} abre")
 
-    # Verificar eventos macro próximos
     check_eventos_macro()
 
-    # Analizar cada activo
     for activo in ACTIVOS:
         try:
             r = calcular_score_total(activo)
             score = r["score"]
             dir_  = r["direction"]
+
+            # Si fue bloqueado, loguear y continuar sin alertar
+            if r.get("bloqueado"):
+                print(f"  {activo}: BLOQUEADO — {r['motivo_bloqueo'][:60]}")
+                time.sleep(3)
+                continue
+
             print(f"  {activo}: score={score} dir={dir_}")
 
             if dir_ == "neutral":
@@ -646,7 +681,6 @@ def analizar_todos() -> None:
                 time.sleep(3)
                 continue
 
-            # SEÑAL FUERTE — alerta inmediata
             if score >= 6.0 and puede_enviar_alerta(activo, score):
                 ok = send_telegram(generar_alerta_trade(r, "SEÑAL"))
                 if ok:
@@ -656,7 +690,6 @@ def analizar_todos() -> None:
                 else:
                     print(f"  → Error enviando señal ❌")
 
-            # SETUP EN FORMACIÓN — alerta temprana
             elif 5.5 <= score < 6.0 and puede_enviar_alerta(activo, score):
                 ok = send_telegram(generar_alerta_trade(r, "FORMACION"))
                 if ok:
@@ -672,22 +705,24 @@ def analizar_todos() -> None:
 
 def es_horario_activo() -> bool:
     now = datetime.now(CLT)
-    # Lunes a viernes, 07:00 a 23:00 CLT
     return now.weekday() < 5 and 7 <= now.hour <= 23
 
 def run():
-    print(f"[SIMONS AGENT v2.0] Iniciando... {datetime.now(CLT).strftime('%d/%m/%Y %H:%M CLT')}")
+    print(f"[SIMONS AGENT v3.2] Iniciando... {datetime.now(CLT).strftime('%d/%m/%Y %H:%M CLT')}")
     send_telegram(
-        "🤖 <b>Agente SIMONS XTB v2.0 — ACTIVO</b>\n"
+        "🤖 <b>Agente SIMONS XTB v3.2 — ACTIVO</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "✅ Analizando: Gold, Silver, Oil, Copper, Platinum, DXY\n"
         "✅ Alertas de sesión: Asia, Europa, New York\n"
         "✅ Alertas macro: EIA (miér), NFP (vier)\n"
         "✅ Umbral señal: score ≥ 6.0/10\n"
-        "✅ Alerta temprana: score ≥ 4.5/10\n"
+        "✅ Alerta temprana: score ≥ 5.5/10\n"
         "✅ Ciclo: 15 min (peak) / 30 min (normal)\n"
+        "🔒 NUEVO: Hard block si noticias = 0/5\n"
+        "🔒 NUEVO: Block SHORT si RSI/Stoch oversold\n"
+        "🔒 NUEVO: Block LONG si RSI/Stoch overbought\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Solo te aviso cuando hay que actuar. 🎯"
+        "Solo te aviso cuando hay confluencia real. 🎯"
     )
 
     while True:
