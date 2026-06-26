@@ -398,7 +398,20 @@ def format_alert(asset, direction, score, price, reason, ctx, high_attention):
         tp = price - sl_dist * 3
 
     rr = 3.0
-    conviccion = "🔴 ALTA" if score >= 7 else "🟡 MEDIA" if score >= 5.5 else "🟢 BAJA"
+    # ─── SISTEMA 3 NIVELES DE CONVICCIÓN (Kelly-inspired) ───────────────────
+    if score >= 8.5:
+        nivel = "🔴 MÁXIMA CONVICCIÓN"
+        lotes = 0.10
+        urgencia = "⚡⚡ APUESTA GRANDE — TODO ALINEADO"
+    elif score >= 7.0:
+        nivel = "🟠 ALTA CONVICCIÓN"
+        lotes = 0.05
+        urgencia = "⚡ APUESTA MEDIA — CONFLUENCIA FUERTE"
+    else:
+        nivel = "🟡 CONVICCIÓN NORMAL"
+        lotes = 0.02
+        urgencia = "Señal estándar — tamaño conservador"
+    conviccion = nivel
     attention_tag = "⭐ VENTANA ALTA ATENCIÓN\n" if high_attention else ""
 
     # Contexto macro adicional
@@ -425,7 +438,9 @@ def format_alert(asset, direction, score, price, reason, ctx, high_attention):
         f"💪 Convicción: {conviccion} ({score:.1f}/10)\n\n"
         f"{macro_ctx}"
         f"📰 Señal: {reason}\n\n"
-        f"⏰ {now_clt().strftime('%H:%M CLT')} | Lotes sugeridos: 0.02\n"
+        f"⏰ {now_clt().strftime('%H:%M CLT')}\n"
+        f"📦 Lotes sugeridos: <b>{lotes}</b>\n"
+        f"💡 {urgencia}\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
         f"⚡ TIENES 10 MIN PARA ENTRAR\n"
         f"Monitoreo reversión activado (30 min)"
@@ -568,7 +583,7 @@ def main_cycle():
 # ─── LOOP ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     send_telegram(
-        "🤖 <b>SIMONS Agent v3.3 — ONLINE</b>\n\n"
+        "🤖 <b>SIMONS Agent v3.4 — ONLINE</b>\n\n"
         "✅ Finnhub activo (noticias reales)\n"
         "✅ Memoria macro persistente\n"
         "✅ Monitor de reversión (5 min)\n"
